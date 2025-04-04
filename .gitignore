@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Data & Output
+dataset/
+*.zip
+*.jpg
+*.png
+*.mp4
+*.avi
+
+# IDE
+.idea/
+.vscode/
+
+# System
+.DS_Store
