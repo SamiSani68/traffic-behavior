@@ -2,9 +2,9 @@ import os
 import cv2
 import glob
 from pathlib import Path
+from tqdm import tqdm
 
-# Mapping from VisDrone category ID to YOLOv8 class ID
-# Merging tricycles (6, 7) into bicycle (1), trailers (10) into truck (5)
+
 class_map = {
     0: 0,  # pedestrian
     1: 0,  # people
@@ -32,12 +32,12 @@ def convert_visdrone_vid_split(split):
     skipped_annotations = 0
     missing_images = 0
 
-    for anno_path in sorted(glob.glob(os.path.join(anno_dir, '*.txt'))):
+    for anno_path in tqdm(sorted(glob.glob(os.path.join(anno_dir, '*.txt'))), desc=f"Processing {split}"):
         sequence_id = Path(anno_path).stem
         seq_img_dir = os.path.join(img_dir, sequence_id)
 
         if not os.path.isdir(seq_img_dir):
-            print(f"❌ Image folder missing: {seq_img_dir}")
+            print(f" Image folder missing: {seq_img_dir}")
             continue
 
         with open(anno_path, 'r') as f:
@@ -81,6 +81,10 @@ def convert_visdrone_vid_split(split):
             w_norm = w / w_img
             h_norm = h / h_img
 
+            if not (0 <= x_center <= 1 and 0 <= y_center <= 1 and w_norm > 0 and h_norm > 0):
+                skipped_annotations += 1
+                continue
+
             yolo_label = f"{mapped_id} {x_center:.6f} {y_center:.6f} {w_norm:.6f} {h_norm:.6f}"
             img_name = f"{sequence_id}_{frame_id:07}.jpg"
             label_name = f"{sequence_id}_{frame_id:07}.txt"
@@ -91,7 +95,7 @@ def convert_visdrone_vid_split(split):
 
             frame_map[label_name]["labels"].append(yolo_label)
 
-        # Write label files and copy images
+
         for label_file, data in frame_map.items():
             label_path = os.path.join(out_label_dir, label_file)
 
@@ -106,13 +110,13 @@ def convert_visdrone_vid_split(split):
         total_frames += len(frame_map)
         print(f"✅ {sequence_id}: {len(frame_map)} frames processed")
 
-    print(f"\n📊 Split: {split}")
-    print(f"   ✅ Total labeled frames: {total_frames}")
-    print(f"   ⚠️ Skipped annotations: {skipped_annotations}")
-    print(f"   ⚠️ Missing or unreadable images: {missing_images}\n")
+    print(f"\n Split: {split}")
+    print(f"    Total labeled frames: {total_frames}")
+    print(f"    Skipped annotations: {skipped_annotations}")
+    print(f"    Missing or unreadable images: {missing_images}\n")
 
 
-# Run for each dataset split
+
 convert_visdrone_vid_split("train")
 convert_visdrone_vid_split("val")
-convert_visdrone_vid_split("test")  # Update to 'test-dev' or 'test-challenge' if needed
+convert_visdrone_vid_split("test")
