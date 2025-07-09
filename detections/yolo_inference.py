@@ -4,9 +4,7 @@ import cv2
 from pathlib import Path
 
 def run_yolo_inference(input_video_path, output_dir, model_path="yolov8n.pt", conf=0.3):
-    """
-    Run YOLOv8 inference on a video and save per-frame results.
-    """
+
     os.makedirs(output_dir, exist_ok=True)
 
     print(f"[YOLOv8] Loading model from {model_path}...")
@@ -31,7 +29,6 @@ def run_yolo_inference(input_video_path, output_dir, model_path="yolov8n.pt", co
             x1, y1, x2, y2 = box
             frame_results.append(f"{frame_idx},{int(cls_id)},{score:.2f},{int(x1)},{int(y1)},{int(x2)},{int(y2)}")
 
-        # Save detections as txt
         output_file = Path(output_dir) / f"{frame_idx:06d}.txt"
         with open(output_file, "w") as f:
             f.write("\n".join(frame_results))

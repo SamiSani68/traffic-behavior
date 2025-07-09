@@ -1,0 +1,87 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+
+# === Configuration ===
+csv_dir = Path("video-analysis/tracked_videos")
+output_dir = csv_dir / "analysis"
+output_dir.mkdir(parents=True, exist_ok=True)
+
+# === Iterate through *_tracks.csv files ===
+csv_files = sorted(csv_dir.glob("*_tracks.csv"))
+
+for csv_file in csv_files:
+    df = pd.read_csv(csv_file)
+    base_name = csv_file.stem.replace("_tracks", "")
+    print(f"Processing: {base_name}")
+
+    if df.empty or "track_id" not in df.columns or "frame" not in df.columns:
+        print(f"Skipping {base_name}: Invalid format or empty file.")
+        continue
+
+    # Sort by track and frame
+    df = df.sort_values(by=["track_id", "frame"])
+
+    # === Track Length Analysis ===
+    track_lengths = df.groupby("track_id").size()
+    short_tracks = track_lengths[track_lengths < 10]
+
+    plt.figure(figsize=(8, 4))
+    track_lengths.hist(bins=50)
+    plt.title(f"Track Length Distribution - {base_name}")
+    plt.xlabel("Frames per Track")
+    plt.ylabel("Number of Tracks")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(output_dir / f"{base_name}_track_lengths.png")
+    plt.close()
+
+    # === Speed Estimation ===
+    df["dx"] = df.groupby("track_id")["x_center"].diff()
+    df["dy"] = df.groupby("track_id")["y_center"].diff()
+    df["speed_px"] = np.sqrt(df["dx"]**2 + df["dy"]**2)
+
+    plt.figure(figsize=(8, 4))
+    df["speed_px"].dropna().clip(upper=200).hist(bins=100)
+    plt.title(f"Speed Distribution (px/frame) - {base_name}")
+    plt.xlabel("Speed (px/frame)")
+    plt.ylabel("Frequency")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(output_dir / f"{base_name}_speed_distribution.png")
+    plt.close()
+
+    # === Track Summary Stats ===
+    summaries = df.groupby("track_id").agg(
+        start_frame=("frame", "min"),
+        end_frame=("frame", "max"),
+        num_frames=("frame", "count"),
+        avg_speed=("speed_px", "mean"),
+        total_dist=("speed_px", "sum"),
+        cls=("class", "first")
+    )
+    summaries["duration"] = summaries["end_frame"] - summaries["start_frame"]
+    summaries["label"] = summaries["cls"].map({0: "VRU", 1: "Fast", 2: "Slow", -1: "Unknown"})
+
+    # Save summary
+    summaries.to_csv(output_dir / f"{base_name}_summary.csv")
+
+    # === Per-class Average Speed Plot ===
+    plt.figure(figsize=(8, 4))
+    summaries[summaries["avg_speed"].notna()].groupby("label")["avg_speed"].mean().reindex(["VRU", "Fast", "Slow", "Unknown"]).plot(kind="bar", color=["green", "red", "blue", "gray"])
+    plt.ylabel("Avg. Speed (px/frame)")
+    plt.title(f"Average Speed per Class - {base_name}")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(output_dir / f"{base_name}_avg_speed_per_class.png")
+    plt.close()
+
+    # === MOT-style export ===
+    df["score"] = 1.0
+    df["visibility"] = 1.0
+    mot_df = df[["frame", "track_id", "x_center", "y_center", "width", "height", "score", "class", "visibility"]]
+    mot_df.columns = ["frame", "id", "x", "y", "w", "h", "score", "class", "visibility"]
+    mot_df.to_csv(output_dir / f"{base_name}.txt", index=False, header=False)
+
+print("All tracking files analyzed and saved in:", output_dir)

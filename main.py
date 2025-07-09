@@ -1,5 +1,5 @@
 from detections.yolo_inference import run_yolo_inference
-from tracking.bytetrack_wrapper import run_tracking
+from tracking.bytetrack import run_tracking
 from lanes.assign_lane import assign_lane_ids
 from behavior.speed_estimation import estimate_speeds
 from behavior.lane_change_detector import detect_lane_changes
