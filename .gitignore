@@ -1,19 +1,9 @@
-# Python
-__pycache__/
-*.pyc
-.venv/
-
-# Data & Output
-dataset/
-*.zip
-*.jpg
-*.png
+# Ignore video files
+videos/
 *.mp4
 *.avi
+*.mov
+*.mkv
 
-# IDE
-.idea/
-.vscode/
-
-# System
-.DS_Store
+# Ignore ByteTrack model folder
+tracking/ByteTrack/
