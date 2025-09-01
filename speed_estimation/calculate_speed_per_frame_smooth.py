@@ -120,7 +120,6 @@ def main():
         filtered_df.sort_values(by='track_id', inplace=True)
 
         output_path = args.output_dir / f"{base_name}_final_speeds.csv"
-        # Round the final speed for cleaner output
         filtered_df['speed_kph'] = filtered_df['speed_kph'].round(2)
         filtered_df.to_csv(output_path, index=False)
         print(f"  - Successfully calculated smoothed speeds and saved filtered results to {output_path}")
