@@ -1,366 +1,161 @@
-#!/usr/bin/env python3
-"""
-click_gcp.py (Single Region Version)
-
-Click GCPs directly on real video frames (not screenshots) so pixel coords
-match your tracker exactly.
-
-For each video:
-  - scrub to a frame (trackbar / keys), press ENTER to lock the frame
-  - click 4 points in order 1→2→3→4 around the quad
-  - then enter distances (meters) for edges:
-      1–2 (along lane), 2–3 (across), 3–4 (along), 4–1 (across)
-  - CSVs are saved:
-      <code>_points_pixel.csv  (columns: x,y)
-      <code>_distances.csv     (columns: from,to,dist_m)
-  - a PNG snapshot + JSON metadata with the chosen frame is saved too.
-
-Optional: overlay DeepSORT bottom points for the current frame to verify alignment.
-
-Usage:
-  python click_gcp_from_video_single.py \
-    --videos_dir /path/to/your/videos \
-    --out_dir    /path/to/your/output \
-    --tracks_dir /path/to/deepsort_tracks (optional)
-
-      python click_gcp.py \
-    --videos_dir /path/to/your/videos \
-    --out_dir    /path/to/your/output \
-    --tracks_dir /path/to/deepsort_tracks (optional)
-
-Controls:
-  - Trackbar   : scrub frames
-  - ← / →      : -/+ 1 frame
-  - , / .      : -/+ 10 frames
-  - [ / ]      : -/+ 100 frames
-  - SPACE      : toggle play/pause
-  - ENTER      : lock current frame for this video (start clicking)
-  - c          : clear current clicks
-  - r          : restart whole video (unlock frame)
-  - q          : skip whole video / quit when asked
-"""
-
-import os
-import re
-import json
-import time
-import glob
+# It displays the first frame of a video and allows you to click on four points (Ground Control Points or GCPs) that form a rectangle in the real world. Afterward, it prompts you to enter the real-world distances (in meters) between these points.
+# python speed_estimation/click_gcp.py --directory videos --output_dir gcp_data
+# input:videos
+# output:speed_estimation/gcp_data
+# Google Maps link: https://www.google.com/maps/place/45°03'38.6%22N+7°32'35.8%22E/@45.0607297,7.4674518,22112m/data=!3m1!1e3!4m4!3m3!8m2!3d45.060728!4d7.543267?entry=ttu&g_ep=EgoyMDI1MDgyNS4wIKXMDSoASAFQAw%3D%3D
+import cv2
 import argparse
 from pathlib import Path
-from collections import defaultdict
-
-import cv2
-import numpy as np
 import pandas as pd
 
-
-def infer_code(path):
-    m = re.search(r"([A-Za-z]_\d+m)", os.path.basename(path))
-    return m.group(1) if m else Path(path).stem
-
-
-def ensure_dir(p: Path):
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+points = []
+frame_display = None
+scale = 1.0
+mouse_pos = (0, 0)
 
 
-def load_tracks_for_video(tracks_dir: Path, code: str):
-    csv_path = None
-    for f in Path(tracks_dir).glob(f"{code}_deepsort_tracks.csv"):
-        csv_path = f
-        break
-    if not csv_path:
-        cand = list(Path(tracks_dir).glob("*_deepsort_tracks.csv"))
-        for f in cand:
-            if infer_code(f) == code:
-                csv_path = f
-                break
-    if not csv_path or not csv_path.exists():
-        return None
+def on_mouse(event, x, y, flags, param):
+    global frame_display, points, scale, mouse_pos
 
-    df = pd.read_csv(csv_path)
-    df.columns = [c.strip().lower() for c in df.columns]
-    if not {"frame", "x_bottom", "y_bottom"}.issubset(df.columns):
-        return None
+    if event == cv2.EVENT_MOUSEMOVE:
+        mouse_pos = (x, y)
 
-    frames = defaultdict(list)
-    for _, r in df.iterrows():
-        fr = int(r["frame"])
-        xb = float(r.get("x_bottom", np.nan))
-        yb = float(r.get("y_bottom", np.nan))
-        if np.isfinite(xb) and np.isfinite(yb):
-            frames[fr].append((xb, yb))
-    return frames
+    if event == cv2.EVENT_LBUTTONDOWN:
+        if len(points) < 4:
+            x_orig = int(x / scale)
+            y_orig = int(y / scale)
+            points.append((x_orig, y_orig))
 
-
-def draw_tracks_overlay(img, frames_map, frame_idx):
-    pts = frames_map.get(frame_idx)
-    if not pts:
-        return
-    for (x, y) in pts:
-        cv2.circle(img, (int(x), int(y)), 2, (0, 255, 255), -1)
+            cv2.circle(frame_display, (x, y), 5, (0, 0, 255), -1)
+            cv2.putText(frame_display, str(len(points)), (x + 10, y - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            if len(points) > 1:
+                prev_x_orig, prev_y_orig = points[-2]
+                prev_x_display = int(prev_x_orig * scale)
+                prev_y_display = int(prev_y_orig * scale)
+                cv2.line(frame_display, (prev_x_display, prev_y_display), (x, y), (0, 255, 0), 2)
+            if len(points) == 4:
+                first_x_orig, first_y_orig = points[0]
+                first_x_display = int(first_x_orig * scale)
+                first_y_display = int(first_y_orig * scale)
+                cv2.line(frame_display, (x, y), (first_x_display, first_y_display), (0, 255, 0), 2)
+        else:
+            print("4 points already selected. Press 'r' to reset or 'q' for next step.")
 
 
-def save_points_csv(out_csv: Path, pts):
-    df = pd.DataFrame(pts, columns=["x", "y"])
-    ensure_dir(out_csv.parent)
-    df.to_csv(out_csv, index=False)
+def prompt_for_distances():
+
+    print("\n--- Enter Real-World Distances (in meters) ---")
+    distances = []
+    labels = ["Point 1 -> 2 (top width)", "Point 2 -> 3 (right length)", "Point 3 -> 4 (bottom width)",
+              "Point 4 -> 1 (left length)"]
+    for label in labels:
+        while True:
+            try:
+                dist_str = input(f"Enter distance for {label}: ").strip()
+                dist_float = float(dist_str)
+                if dist_float > 0:
+                    distances.append(dist_float)
+                    break
+                else:
+                    print("Distance must be a positive number.")
+            except ValueError:
+                print("Invalid input. Please enter a number.")
+    return distances
 
 
-def save_distances_csv(out_csv: Path, dists):
-    # dists order: [d12, d23, d34, d41]
-    df = pd.DataFrame({
+def save_data_to_csv(output_dir, video_basename, points_data, distances_data):
+    points_df = pd.DataFrame(points_data, columns=['x', 'y'])
+    distances_df = pd.DataFrame({
         "from": [1, 2, 3, 4],
         "to": [2, 3, 4, 1],
-        "dist_m": dists
+        "dist_m": distances_data
     })
-    ensure_dir(out_csv.parent)
-    df.to_csv(out_csv, index=False)
-
-
-def prompt_distances(code):
-    print(f"\nEnter real-world distances (meters) for {code}")
-    print("  Tip: 1–2 and 3–4 are the long edges (along the lane).")
-    vals = []
-    labels = ["1→2 (long)", "2→3 (width)", "3→4 (long)", "4→1 (width)"]
-    for lab in labels:
-        while True:
-            s = input(f"  Distance {lab}: ").strip()
-            if s.lower() in ("q", "quit"):
-                return None
-            try:
-                v = float(s)
-                if v <= 0:
-                    print("    Must be > 0.")
-                    continue
-                vals.append(v)
-                break
-            except ValueError:
-                print("    Please enter a number, or 'q' to cancel this video.")
-    return vals
-
-
-def draw_ui_text(img, lines, x=10, y=20, lh=20, color=(255, 255, 255)):
-    for i, ln in enumerate(lines):
-        cv2.putText(img, ln, (x, y + i * lh), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
-
-
-def click_loop(win, base_frame, code, locked_frame_idx):
-    """Collect 4 points in order 1..4 on the locked frame; then prompt distances."""
-    img = base_frame.copy()
-    h, w = img.shape[:2]
-    clicks = []
-
-    def on_mouse(event, x, y, flags, param):
-        nonlocal clicks, img
-        if event == cv2.EVENT_LBUTTONDOWN:
-            if len(clicks) < 4:
-                clicks.append((x, y))
-                # draw marker + index
-                cv2.circle(img, (x, y), 4, (0, 0, 255), -1)
-                cv2.putText(img, str(len(clicks)), (x + 6, y - 6),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
-                # draw edge if not first
-                if len(clicks) > 1:
-                    cv2.line(img, clicks[-2], clicks[-1], (0, 0, 255), 2)
-                if len(clicks) == 4:
-                    cv2.line(img, clicks[-1], clicks[0], (0, 0, 255), 2)
-
-    cv2.setMouseCallback(win, on_mouse)
-
-    while True:
-        canvas = img.copy()
-        draw_ui_text(canvas, [
-            f"{code}   frame: {locked_frame_idx}",
-            "Click 4 points in order 1→2→3→4 around the quad.",
-            "[c]=clear   [Enter]=finish points & enter distances   [q]=cancel video"
-        ], x=10, y=20)
-
-        cv2.imshow(win, canvas)
-        k = cv2.waitKey(30) & 0xFF
-
-        if k in (ord('q'), 27):  # q or ESC
-            return None, None
-        elif k == ord('c'):
-            clicks = []
-            img = base_frame.copy()
-        elif k in (13, 10):  # Enter
-            if len(clicks) != 4:
-                print("[WARN] Need exactly 4 clicks (got {}).".format(len(clicks)))
-                continue
-            # prompt distances in console
-            dists = prompt_distances(code)
-            if dists is None:
-                print("[WARN] Video cancelled during distance entry.")
-                return None, None
-
-            return clicks, dists
-
-
-def process_video(video_path: Path, out_dir: Path, tracks_dir=None, overwrite=False):
-    code = infer_code(video_path)
-
-    # Define output paths without region
-    pixel_csv = out_dir / f"{code}_points_pixel.csv"
-    dist_csv = out_dir / f"{code}_distances.csv"
-
-    if pixel_csv.exists() and dist_csv.exists() and not overwrite:
-        print(f"[SKIP] {code} (already exists)")
-        return
-
-    cap = cv2.VideoCapture(str(video_path))
-    if not cap.isOpened():
-        print(f"[SKIP] Cannot open {video_path}")
-        return
-
-    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
-    fps = cap.get(cv2.CAP_PROP_FPS) or 29.97
-    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    frames_map = load_tracks_for_video(tracks_dir, code) if tracks_dir else None
-
-    win = f"GCP picker: {code}"
-    cv2.namedWindow(win, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(win, min(w, 1280), min(h, 720))
-
-    cur = total // 2
-    playing = False
-
-    def on_trackbar(pos):
-        nonlocal cur
-        cur = int(pos)
-
-    cv2.createTrackbar("frame", win, max(cur, 0), max(total - 1, 1), on_trackbar)
-
-    locked_frame_idx = None
-    base_frame = None
-
-    print(f"\n=== {code} ===")
-    print("Scrub to a clean frame, then press ENTER to lock it.")
-
-    while True:
-        if playing:
-            cur = min(cur + 1, total - 1)
-            cv2.setTrackbarPos("frame", win, cur)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, cur)
-        ok, frame = cap.read()
-        if not ok:
-            playing = False
-            time.sleep(0.02)
-            continue
-
-        canvas = frame.copy()
-        draw_ui_text(canvas, [
-            f"{code}  ({w}x{h})  fps={fps:.2f}  frame={cur}/{max(total - 1, 0)}",
-            "Controls: ←/→ ±1 | ,/. ±10 | [/ ] ±100 | SPACE play/pause | ENTER lock frame | q skip video"
-        ], x=10, y=20)
-
-        if frames_map is not None:
-            draw_tracks_overlay(canvas, frames_map, cur)
-            cv2.putText(canvas, "DeepSORT points overlay", (10, h - 15),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2, cv2.LINE_AA)
-
-        cv2.imshow(win, canvas)
-        k = cv2.waitKey(20) & 0xFF
-
-        if k in (ord('q'), 27):
-            cap.release()
-            cv2.destroyWindow(win)
-            print(f"[SKIP] {code}")
-            return
-
-        # --- Key controls for scrubbing video ---
-        if k == ord(' '):
-            playing = not playing
-        elif k in (81, ord('h'), ord('a')):
-            cur = max(0, cur - 1);
-            cv2.setTrackbarPos("frame", win, cur)
-        elif k in (83, ord('l'), ord('d')):
-            cur = min(total - 1, cur + 1);
-            cv2.setTrackbarPos("frame", win, cur)
-        elif k == ord(','):
-            cur = max(0, cur - 10);
-            cv2.setTrackbarPos("frame", win, cur)
-        elif k == ord('.'):
-            cur = min(total - 1, cur + 10);
-            cv2.setTrackbarPos("frame", win, cur)
-        elif k == ord('['):
-            cur = max(0, cur - 100);
-            cv2.setTrackbarPos("frame", win, cur)
-        elif k == ord(']'):
-            cur = min(total - 1, cur + 100);
-            cv2.setTrackbarPos("frame", win, cur)
-        elif k in (13, 10):  # ENTER -> lock frame
-            locked_frame_idx = int(cur)
-            base_frame = frame.copy()
-            break
-
-    # Once frame is locked, start the clicking process
-    res_pts, res_dists = click_loop(win, base_frame, code, locked_frame_idx)
-
-    cap.release()
-    cv2.destroyWindow(win)
-
-    if res_pts is None or res_dists is None:
-        print(f"[CANCEL] Video {code} was cancelled. No data saved.")
-        return
-
-    # --- Save all data at the end ---
-    print(f"\n[INFO] Saving data for {code}...")
-
-    # Save snapshot + metadata
-    snap_dir = ensure_dir(out_dir / "_snapshots")
-    meta_dir = ensure_dir(out_dir / "_meta")
-
-    snap_path = snap_dir / f"{code}_frame{locked_frame_idx}.png"
-    cv2.imwrite(str(snap_path), base_frame)
-    meta_path = meta_dir / f"{code}.json"
-    with open(meta_path, "w") as f:
-        json.dump({"code": code, "frame": locked_frame_idx, "fps": float(fps),
-                   "video": str(video_path)}, f, indent=2)
-    print(f"[SAVED] snapshot: {snap_path}")
-    print(f"[SAVED] meta    : {meta_path}")
-
-    # Save points and distances
-    save_points_csv(pixel_csv, res_pts)
-    save_distances_csv(dist_csv, res_dists)
-    print(f"[SAVED] {pixel_csv}")
-    print(f"[SAVED] {dist_csv}")
-    print(f"[DONE] {code}")
+    points_filepath = output_dir / f"{video_basename}_points.csv"
+    distances_filepath = output_dir / f"{video_basename}_distances.csv"
+    points_df.to_csv(points_filepath, index=False)
+    distances_df.to_csv(distances_filepath, index=False)
+    print(f"Successfully saved data to:\n  - {points_filepath}\n  - {distances_filepath}")
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--videos_dir", required=True, type=Path)
-    ap.add_argument("--out_dir", required=True, type=Path)
-    ap.add_argument("--tracks_dir", type=Path, default=None,
-                    help="Folder with *_deepsort_tracks.csv to overlay bottom points (optional).")
-    ap.add_argument("--include", default="", help="Regex to include certain videos (e.g., '^A_|^B_')")
-    ap.add_argument("--exclude", default="", help="Regex to exclude videos")
-    ap.add_argument("--overwrite", action="store_true", help="Overwrite existing CSVs for a video")
-    args = ap.parse_args()
+    global points, frame_display, scale, mouse_pos
 
-    videos = []
-    for ext in ("*.mp4", "*.avi", "*.mov", "*.mkv"):
-        videos += glob.glob(str(args.videos_dir / ext))
-    videos = sorted(videos)
+    parser = argparse.ArgumentParser(description="Collect GCPs and distances and save to CSVs.")
+    parser.add_argument("--directory", required=True, help="Path to the directory with .MP4 files.")
+    parser.add_argument("--output_dir", required=True, type=Path, help="Directory to save the output CSV files.")
+    args = parser.parse_args()
 
-    if args.include:
-        rx = re.compile(args.include)
-        videos = [v for v in videos if rx.search(os.path.basename(v))]
-    if args.exclude:
-        rx = re.compile(args.exclude)
-        videos = [v for v in videos if not rx.search(os.path.basename(v))]
+    args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    if not videos:
-        print("No videos found.")
+    video_dir = Path(args.directory)
+    video_files = list(video_dir.glob('*.[mM][pP]4'))
+
+    if not video_files:
+        print(f"Error: No .MP4 files found in {args.directory}")
         return
 
-    out_dir = ensure_dir(args.out_dir)
+    print(f"Found {len(video_files)} videos to process.")
 
-    for vp in videos:
-        process_video(Path(vp), out_dir, tracks_dir=args.tracks_dir, overwrite=args.overwrite)
+    for video_path in video_files:
+        points = []
+        print(f"\n--- Processing: {video_path.name} ---")
+
+        cap = cv2.VideoCapture(str(video_path))
+        success, frame_original = cap.read()
+        cap.release()
+
+        if not success:
+            print(f"Error: Could not read frame from {video_path.name}. Skipping.")
+            continue
+
+        h_orig, w_orig, _ = frame_original.shape
+        max_display_width = 1600
+
+        display_height = 0
+
+        if w_orig > max_display_width:
+            scale = max_display_width / w_orig
+            display_height = int(h_orig * scale)
+            frame_display = cv2.resize(frame_original, (max_display_width, display_height))
+        else:
+            scale = 1.0
+            frame_display = frame_original.copy()
+
+        window_name = f"GCP Collector: {video_path.name} | 'r' to reset, 'q' to finish"
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        cv2.setMouseCallback(window_name, on_mouse)
+
+        print("Click on the image to select 4 points. Press 'q' when finished.")
+
+        while True:
+            canvas = frame_display.copy()
+            if mouse_pos[0] > 0 and mouse_pos[1] > 0:
+                cv2.line(canvas, (mouse_pos[0] - 20, mouse_pos[1]), (mouse_pos[0] + 20, mouse_pos[1]), (255, 255, 0), 1)
+                cv2.line(canvas, (mouse_pos[0], mouse_pos[1] - 20), (mouse_pos[0], mouse_pos[1] + 20), (255, 255, 0), 1)
+            cv2.imshow(window_name, canvas)
+            key = cv2.waitKey(1) & 0xFF
+
+            if key == ord('q'):
+                break
+            elif key == ord('r'):
+                points = []
+                if w_orig > max_display_width:
+                    frame_display = cv2.resize(frame_original, (max_display_width, display_height))
+                else:
+                    frame_display = frame_original.copy()
+                print("Points reset for the current video.")
+
+        cv2.destroyAllWindows()
+
+        if len(points) == 4:
+            distances = prompt_for_distances()
+            video_basename = video_path.stem
+            save_data_to_csv(args.output_dir, video_basename, points, distances)
+        else:
+            print(f"Warning: Only {len(points)} points collected for {video_path.name}. No data saved.")
+
+    print("\n\nAll videos processed.")
 
 
 if __name__ == "__main__":

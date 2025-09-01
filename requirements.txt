@@ -1,19 +1,29 @@
+#Core ML & Computer Vision
 ultralytics
 opencv-python
-numpy
-matplotlib
-tqdm
-scikit-learn
-pandas==2.2.3
-segment-anything @ git+https://github.com/facebookresearch/segment-anything.git
 torch
-opencv-python
-numpy
-git+https://github.com/facebookresearch/segment-anything.git
 torchvision
+
+#Data Handling & Numerics
+pandas==2.2.3
+numpy
+scipy
+
+#Plotting & Visualization
+matplotlib
+seaborn
+
+#Object Tracking
+deep-sort-realtime
+
+#Analysis & Metrics
+motmetrics
+scikit-learn
+
+#Utilities
+tqdm
+
+#Annotation (for data preparation)
 labelme
 pillow
-seaborn
-scipy
-motmetrics
 

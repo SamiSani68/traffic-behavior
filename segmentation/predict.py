@@ -1,3 +1,7 @@
+#Loads best_model.pth and applies a green mask to the predicted foreground in videos, saving the output in the predictions folder.
+#python segmentation/predict.py
+#input:segmentation/checkpoints/best_model.pth , videos
+#output: segmentation/predictions
 import os
 import cv2
 import torch
@@ -11,7 +15,7 @@ from torchvision.models.segmentation import deeplabv3_resnet101, DeepLabV3_ResNe
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 NUM_CLASSES = 2  # background and foreground
 MODEL_PATH = 'checkpoints/best_model.pth'
-INPUT_FOLDER = 'video-analysis/videos'
+INPUT_FOLDER = 'videos'
 OUTPUT_FOLDER = 'predictions'
 
 def load_model():
@@ -42,7 +46,7 @@ def process_video(model, video_path, output_path):
     cap = cv2.VideoCapture(video_path)
 
     if not cap.isOpened():
-        print(f"❌ Cannot open {video_path}")
+        print(f"Cannot open {video_path}")
         return
 
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -62,11 +66,9 @@ def process_video(model, video_path, output_path):
 
         pred_mask = predict_frame(model, frame)
 
-        # Create color mask
         color_mask = np.zeros_like(frame)
         color_mask[pred_mask == 1] = [0, 255, 0]  # green for foreground
 
-        # Overlay mask on frame
         blended = cv2.addWeighted(frame, 0.7, color_mask, 0.3, 0)
         out.write(blended)
         pbar.update(1)
@@ -75,10 +77,7 @@ def process_video(model, video_path, output_path):
     out.release()
     pbar.close()
 
-    print(f"✅ Saved: {output_path}")
-
-# MAIN
-
+    print(f"Saved: {output_path}")
 
 def main():
     model = load_model()

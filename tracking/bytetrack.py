@@ -1,3 +1,7 @@
+#It reads the raw detection logs (CSV files) and original videos. It then applies the ByteTrack algorithm to assign a consistent ID to each object over time.
+#python tracking/bytetrack.py
+#input: video-analysis/detection_results/logs , videos
+#output: video-analysis/tracked_videos/bytetrack   , _tracks.csv , tracking/ByteTrack_analysis/ByteTrack_analysis_plots
 import os
 import cv2
 import numpy as np
@@ -10,11 +14,10 @@ import seaborn as sns
 import matplotlib
 matplotlib.use('Agg')
 
-# CONFIG
-LOG_DIR = "video-analysis/results/logs"
-VIDEO_DIR = "video-analysis/videos"
-OUT_DIR = "video-analysis/tracked_videos"
-PLOT_DIR = "video-analysis/analysis_plots"
+LOG_DIR = "video-analysis/detection_results/logs"
+VIDEO_DIR = "videos"
+OUT_DIR = "video-analysis/tracked_videos/bytetrack"
+PLOT_DIR = "tracking/ByteTrack_analysis/ByteTrack_analysis_plots"
 os.makedirs(OUT_DIR, exist_ok=True)
 os.makedirs(PLOT_DIR, exist_ok=True)
 
@@ -29,7 +32,6 @@ group_names = ["VRU", "Fast", "Slow"]
 class_map = {0: "VRU", 1: "Fast", 2: "Slow", -1: "Unknown"}
 palette = {"VRU": "green", "Fast": "red", "Slow": "blue", "Unknown": "gray"}
 
-# Tracker configuration
 tracker_args = Namespace(
     track_thresh=0.3,
     match_thresh=0.8,
@@ -121,10 +123,8 @@ for csv_file in sorted(Path(LOG_DIR).glob("*.csv")):
     print(f"Video saved: {video_out_path}")
     print(f"CSV saved:   {csv_out_path}")
 
-    # Generate plots
     df_out["class_label"] = df_out["class"].map(class_map)
 
-    # Plot 1: class distribution
     counts = df_out["class_label"].value_counts().reindex(class_map.values()).fillna(0)
     counts.plot(kind="bar", color=[palette[k] for k in counts.index])
     plt.title(f"Track Count per Class - {video_base}")
@@ -135,7 +135,6 @@ for csv_file in sorted(Path(LOG_DIR).glob("*.csv")):
     plt.savefig(os.path.join(PLOT_DIR, f"{video_base}_class_count.png"))
     plt.close()
 
-    # Plot 2: per-frame class count
     frame_counts = df_out.groupby(["frame", "class_label"]).size().unstack(fill_value=0)
     frame_counts.plot(color=[palette[k] for k in frame_counts.columns])
     plt.title(f"Objects Tracked per Frame - {video_base}")
@@ -146,7 +145,6 @@ for csv_file in sorted(Path(LOG_DIR).glob("*.csv")):
     plt.savefig(os.path.join(PLOT_DIR, f"{video_base}_per_frame_count.png"))
     plt.close()
 
-    # Plot 3: Heatmap
     known_df = df_out[df_out["class"] != -1]
     if not known_df.empty:
         sns.kdeplot(data=known_df, x="x_center", y="y_center", fill=True, cmap="viridis", bw_adjust=0.6)
@@ -156,7 +154,6 @@ for csv_file in sorted(Path(LOG_DIR).glob("*.csv")):
         plt.savefig(os.path.join(PLOT_DIR, f"{video_base}_heatmap.png"))
         plt.close()
 
-    # Plot 4: Scatter
     sns.scatterplot(data=df_out, x="x_center", y="y_center", hue="class_label",
                     palette=palette, alpha=0.5, linewidth=0)
     plt.title(f"Scatter of Tracked Locations - {video_base}")

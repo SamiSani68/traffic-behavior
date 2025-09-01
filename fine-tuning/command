@@ -1,0 +1,2 @@
+1-yolo task=detect mode=train model=yolov8l.pt data=/home/fullsuper/Sami/dataset/data.yaml epochs=100 patience=30 batch=16 imgsz=1024 iou=0.6 name=yolov8-fine-tuned5
+2-yolo task=detect mode=train model=runs/detect/yolov8-fine-tuned5/weights/last.pt data=/home/fullsuper/Sami/dataset/data.yaml epochs=100 patience=30 batch=16 imgsz=1024 iou=0.6 name=yolov8-fine-tuned52

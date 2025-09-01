@@ -1,14 +1,14 @@
 #apply the DeepSORT algorithm, which uses both motion and visual appearance (the frame itself) to track objects.
-#python tracking/deepsort1.py
-#input: video-analysis/results/logs , video-analysis/videos
+#python tracking/deepsort.py
+#input: video-analysis/detection_results/logs , videos
 #output: video-analysis/tracked_videos/deepsort _deepsort_tracked.mp4 , _deepsort_tracks.csv
 import cv2
 import pandas as pd
 from pathlib import Path
 from deep_sort_realtime.deepsort_tracker import DeepSort
 
-LOG_DIR = Path("video-analysis/results/logs")
-VIDEO_DIR = Path("video-analysis/videos")
+LOG_DIR = Path("video-analysis/detection_results/logs")
+VIDEO_DIR = Path("videos")
 OUTPUT_DIR = Path("video-analysis/tracked_videos/deepsort")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 

@@ -1,7 +1,12 @@
+#Extracts image frames from raw videos.
+#python segmentation/frames.py
+#input:videos
+#output:segmentation/dataset/frames
+
 import cv2
 from pathlib import Path
 
-video_folder = Path("video-analysis/videos")
+video_folder = Path("videos")
 output_folder = Path("dataset/frames")
 output_folder.mkdir(parents=True, exist_ok=True)
 

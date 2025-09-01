@@ -1,28 +1,21 @@
+# python speed_estimation/calculate_speed_per_frame_smooth.py   --tracks_dir video-analysis/tracked_videos/deepsort   --matrices_dir speed_estimation/matrices   --videos_dir videos   --output_dir speed_estimation/final_output_per_frame_smooth
+
 import cv2
 import argparse
 from pathlib import Path
 import pandas as pd
 import numpy as np
-import math
 
-# --- Configuration for Speed Filtering ---
 MIN_SPEED_KPH = 15
 MAX_SPEED_KPH = 200
 
-
-# ---------------------------------------------
-
 def calculate_speeds(tracks_df: pd.DataFrame, matrix: np.ndarray, fps: float) -> pd.DataFrame:
-    """
-    Calculates a smoothed, frame-by-frame speed for each unique track ID.
-    """
+
     FRAME_COL = 'frame'
     TRACK_ID_COL = 'track_id'
     X1_COL, Y1_COL, X2_COL, Y2_COL = 'x1', 'y1', 'x2', 'y2'
 
-    # --- NEW: Set the window size for the moving average ---
     SMOOTHING_WINDOW_SIZE = 5
-    # ---------------------------------------------------------
 
     tracks_df = tracks_df.sort_values(by=[TRACK_ID_COL, FRAME_COL])
 
@@ -41,21 +34,15 @@ def calculate_speeds(tracks_df: pd.DataFrame, matrix: np.ndarray, fps: float) ->
     distance_meters = np.sqrt(tracks_df['dx'] ** 2 + tracks_df['dy'] ** 2)
     time_seconds = tracks_df['df'] / fps
 
-    # Calculate the raw, instantaneous speed
     speed_kph = (distance_meters / time_seconds) * 3.6
     tracks_df['speed_kph'] = speed_kph
 
-    # Fill the first frame's NaN speed with the next valid one
     tracks_df['speed_kph'] = tracks_df.groupby(TRACK_ID_COL)['speed_kph'].bfill()
 
-    # --- NEW: Apply a moving average to smooth the speed ---
-    # The groupby ensures the rolling average restarts for each new track_id
     smoothed_speeds = tracks_df.groupby(TRACK_ID_COL)['speed_kph'].rolling(window=SMOOTHING_WINDOW_SIZE,
                                                                            min_periods=1).mean()
 
-    # The result of groupby().rolling() has a multi-index, so we need to reset it to align back with the main dataframe
     tracks_df['speed_kph'] = smoothed_speeds.reset_index(level=0, drop=True)
-    # ----------------------------------------------------------
 
     tracks_df = tracks_df.drop(columns=['real_x', 'real_y', 'dx', 'dy', 'df'])
 

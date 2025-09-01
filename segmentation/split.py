@@ -1,4 +1,7 @@
-import os
+#Splits your dataset of images and masks into training and validation sets.
+#python segmentation/split.py
+#input:segmentation/dataset/frames
+#output:segmentation/dataset/frames/images/train and dataset/frames/images/val
 import random
 import shutil
 from pathlib import Path
