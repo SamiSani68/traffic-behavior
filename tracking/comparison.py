@@ -58,7 +58,7 @@ plot_results = []
 def analyze_video_tracking(video_name, gt_path, bt_path, ds_path, max_frames=200):
     print(f"\n=== Evaluating {video_name} ===")
     try:
-        labels_path = os.path.join("MOT-analyse/gt", video_name, "labels.txt")
+        labels_path = os.path.join("tracking/MOT-analyse/gt", video_name, "labels.txt")
         original_gt_id_to_grouped_id = load_class_mappings(labels_path)
 
         gt_df = pd.read_csv(gt_path, header=None)
@@ -117,24 +117,24 @@ def analyze_video_tracking(video_name, gt_path, bt_path, ds_path, max_frames=200
 
 video_configs = {
     "A_70m": {
-        "gt": "gt/A_70m/gt.txt",
-        "bt": "ByteTrack/A_70m_tracks.csv",
-        "ds": "DeepSORT/A_70m_deepsort_tracks.csv"
+        "gt": "tracking/MOT-analyse/gt/A_70m/gt.txt",
+        "bt": "tracking/MOT-analyse/ByteTrack/A_70m_tracks.csv",
+        "ds": "tracking/MOT-analyse/DeepSORT/A_70m_deepsort_tracks.csv"
     },
     "B_50m": {
-        "gt": "gt/B_50m/gt.txt",
-        "bt": "ByteTrack/B_50m_tracks.csv",
-        "ds": "DeepSORT/B_50m_deepsort_tracks.csv"
+        "gt": "tracking/MOT-analyse/gt/B_50m/gt.txt",
+        "bt": "tracking/MOT-analyse/ByteTrack/B_50m_tracks.csv",
+        "ds": "tracking/MOT-analyse/DeepSORT/B_50m_deepsort_tracks.csv"
     },
     "B_80m": {
-        "gt": "gt/B_80m/gt.txt",
-        "bt": "ByteTrack/B_80m_tracks.csv",
-        "ds": "DeepSORT/B_80m_deepsort_tracks.csv"
+        "gt": "tracking/MOT-analyse/gt/B_80m/gt.txt",
+        "bt": "tracking/MOT-analyse/ByteTrack/B_80m_tracks.csv",
+        "ds": "tracking/MOT-analyse/DeepSORT/B_80m_deepsort_tracks.csv"
     },
     "C_145m": {
-        "gt": "gt/C_145m/gt.txt",
-        "bt": "ByteTrack/C_145m_tracks.csv",
-        "ds": "DeepSORT/C_145m_deepsort_tracks.csv"
+        "gt": "tracking/MOT-analyse/gt/C_145m/gt.txt",
+        "bt": "tracking/MOT-analyse/ByteTrack/C_145m_tracks.csv",
+        "ds": "tracking/MOT-analyse/DeepSORT/C_145m_deepsort_tracks.csv"
     }
 }
 
